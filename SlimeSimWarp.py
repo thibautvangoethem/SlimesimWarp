@@ -134,7 +134,6 @@ class SlimeSimWarp:
 
     def advanceAgents(self):
         # todo see if this can be optmized
-        # for _ in range(self.iterations):
         wp.launch(advanceAgents, dim=self.agents.size, inputs=[self.agents, self.field, self.seed])
 
     def step(self):
@@ -143,15 +142,13 @@ class SlimeSimWarp:
             #     wp.capture_launch(self.graph)
             # else:
             self.advanceAgents()
-        wp.launch(blurdiffuse, dim=self.field.shape, inputs=[self.field])
+            wp.launch(blurdiffuse, dim=self.field.shape, inputs=[self.field])
         self.seed += 1
 
     def step_and_render_frame(self, frame_num=None, img=None):
         self.step()
-
-        with wp.ScopedTimer("render"):
-            if img:
-                img.set_array(self.field.numpy())
+        if img:
+            img.set_array(self.field.numpy())
 
         return (img,)
 
