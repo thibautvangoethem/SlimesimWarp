@@ -8,6 +8,7 @@ import numpy as np
 def interpolate(a, b, t):
     return a + t * (b - a)
 
+
 @jit(nopython=True, nogil=True)
 def advanceAgents(timestep: float, agents, size, field, speed, steerStrength, sensorDirOffset, sensorSize,
                   amountOfAgents):
@@ -41,6 +42,7 @@ def advanceAgents(timestep: float, agents, size, field, speed, steerStrength, se
 
         field[(int(newx)) + (int(newy)) * size] = 1.0
 
+
 @jit(nopython=True, nogil=True)
 def slimesteerUpdate(agent, timestep: float, steerStrength, sensorDirOffset, sensorSize, size, field):
     wForward = sense(agent, 0, sensorDirOffset, sensorSize, size, field)
@@ -54,6 +56,7 @@ def slimesteerUpdate(agent, timestep: float, steerStrength, sensorDirOffset, sen
     else:
         agent[2] -= steerStrength * timestep
 
+
 @jit(nopython=True, nogil=True)
 def sense(agent: list, angle: float, sensorDirOffset, sensorSize, size, field):
     sangle = agent[2] + angle
@@ -65,19 +68,20 @@ def sense(agent: list, angle: float, sensorDirOffset, sensorSize, size, field):
     sum = 0.
     for i in range(-sensorSize, sensorSize):
         cx = int(sposx + i)
-        if cx >= 0 and cx < size:
+        if 0 <= cx < size:
             continue
         for j in range(-sensorSize, sensorSize):
             cy = int(sposy + j)
-            if cy >= 0 and cy < size:
-                sum += field[(cx) + (cy) * size]
+            if 0 <= cy < size:
+                sum += field[cx + cy * size]
     return sum
+
 
 @jit(nopython=True, nogil=True)
 def blurDiffuse(timestep, size, field, evaporate):
     for i in range(size):
         for j in range(size):
-            field[(i) + (j) * size] = max(0., field[(i) + (j) * size] - (
+            field[i + j * size] = max(0., field[i + j * size] - (
                     evaporate * timestep))
     for i in range(size):
         for j in range(size):
@@ -86,12 +90,13 @@ def blurDiffuse(timestep, size, field, evaporate):
                 for dy in [-1, 0, 1]:
                     sx = i + dx
                     sy = j + dy
-                    if (sx >= 0 and sx < size and sy >= 0 and sy < size):
-                        sum += field[(sx) + (sy) * size]
+                    if 0 <= sx < size and 0 <= sy < size:
+                        sum += field[sx + sy * size]
 
-            field[(i) + (j) * size] = interpolate(field[(i) + (j) * size],
-                                                          sum / 9.0,
-                                                          10 * timestep)
+            field[i + j * size] = interpolate(field[i + j * size],
+                                              sum / 9.0,
+                                              10 * timestep)
+
 
 class SlimeSimNumba(object):
     def __init__(self):
@@ -103,7 +108,7 @@ class SlimeSimNumba(object):
         self.amountOfAgents = settings.amountOfAgents
         self.evaporate = settings.evaporate
         self.size = settings.size
-        self.dt=settings.dt
+        self.dt = settings.dt
 
         self.field = np.zeros(((self.size) ** 2), dtype=float)
         self.agents = np.zeros((settings.amountOfAgents, 3))
@@ -130,9 +135,10 @@ class SlimeSimNumba(object):
     def getf(self):
         return self.field.reshape((self.size, self.size))
 
+
 if __name__ == '__main__':
     s = Settings()
-    sim = SlimeSimNumba(512, s)
+    sim = SlimeSimNumba()
     while True:
         sim.advance(0.05)
     # interpolate.parallel_diagnostics(level=4)

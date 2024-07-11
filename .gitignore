@@ -183,3 +183,9 @@ fabric.properties
 
 # idea folder, uncomment if you don't need it
 # .idea
+/.idea/misc.xml
+/.idea/.gitignore
+/.idea/slimesimNumba.iml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/modules.xml
+/.idea/vcs.xml

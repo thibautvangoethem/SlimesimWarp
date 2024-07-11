@@ -3,17 +3,16 @@ import random
 import math
 import numpy as np
 
-itlist = [-1, 0, 1]
 
 class SlimeSimNormal:
     def __init__(self):
         self.settings = Settings()
-        self.size = self.settings.size-2
+        self.size = self.settings.size - 2
         self.field = np.zeros(((self.size + 2) ** 2), dtype=float)
         self.agents = []
         for i in range(self.settings.amountOfAgents):
-            xpos = (random.uniform(0., 1.))*self.size
-            ypos = (random.uniform(0., 1.))*self.size
+            xpos = (random.uniform(0., 1.)) * self.size
+            ypos = (random.uniform(0., 1.)) * self.size
             angle = random.uniform(0., 1.) * 2 * math.pi
             self.agents += [[xpos, ypos, angle]]
 
@@ -71,7 +70,7 @@ class SlimeSimNormal:
             for j in range(-self.settings.sensorSize, self.settings.sensorSize):
                 cx = int(sposx + i)
                 cy = int(sposy + j)
-                if cx > 0 and cx < self.size and cy > 0 and cy < self.size:
+                if 0 < cx < self.size and 0 < cy < self.size:
                     sum += self.field[(cx + 1) + (cy + 1) * self.size]
         return sum
 
@@ -86,8 +85,8 @@ class SlimeSimNormal:
         for i in range(self.size):
             for j in range(self.size):
                 sum = 0.
-                for dx in itlist:
-                    for dy in itlist:
+                for dx in range(-1,1):
+                    for dy in range(-1,1):
                         sx = i + dx
                         sy = j + dy
                         sum += self.field[(sx + 1) + (sy + 1) * self.size]
@@ -96,11 +95,10 @@ class SlimeSimNormal:
                                                                              10 * timestep)
 
     def getf(self):
-        return self.field.reshape((self.size+2,self.size+2))
+        return self.field.reshape((self.size + 2, self.size + 2))
 
     def step_and_render_frame(self, frame_num=None, img=None):
         self.step()
         if img:
-            img.set_array(self.field.reshape((self.size+2, self.size+2)))
-
+            img.set_array(self.field.reshape((self.size + 2, self.size + 2)))
         return (img,)

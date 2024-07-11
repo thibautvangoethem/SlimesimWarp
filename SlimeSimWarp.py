@@ -7,7 +7,7 @@ from SlimeSimSettings import Settings
 s = Settings()
 si = s.size
 size = wp.constant(si)
-# used for some calculations
+# used for some calculations that require float size, dont want to cast each time
 sizef = wp.constant(float(si))
 
 amountOfAgents = wp.constant(s.amountOfAgents)
@@ -16,11 +16,13 @@ evaporate = wp.constant(s.evaporate)
 steerStrength = wp.constant(s.steerStrength)
 sensorSize = wp.constant(s.sensorSize)
 sensorDirOffset = wp.constant(s.sensorDirOffset)
+diffuseSize = wp.constant(s.diffuseSize)
+diffuseSizef = wp.constant(float(((s.diffuseSize * 2) + 1) ** 2))
+randomSteerForce = wp.constant(s.randomSteerForce)
 dt = wp.constant(s.dt)
 
 
 # wp.config.print_launches = True
-
 # wp.config.mode = "debug"
 
 
@@ -37,22 +39,25 @@ def sense(agent: wp.vec3f, field: wp.array2d(dtype=float), angle: float):
         for j in range(-sensorSize, sensorSize):
             cx = sposx + i
             cy = sposy + j
-            if (cx >= 0 and cx < size and cy >= 0 and cy < size):
-                sum += field[cx,cy]
+            if 0 <= cx < size and 0 <= cy < size:
+                sum += field[cx, cy]
     return sum
 
 
 @wp.func
-def slimesteerUpdate(agent: wp.vec3f, field: wp.array2d(dtype=float)):
+def slimesteerUpdate(agent: wp.vec3f, field: wp.array2d(dtype=float), seed: int,tid: int):
     wForward = sense(agent, field, 0.)
     wLeft = sense(agent, field, wp.pi / 4.)
     wRight = sense(agent, field, -(wp.pi / 4.))
+    rng = wp.rand_init(seed,tid)
+    randomsteer = wp.randf(rng, -1.0, 1.0) * randomSteerForce
+
     if wForward > wLeft and wForward > wRight:
-        return agent[2]
+        return agent[2] + randomsteer
     if wLeft > wRight:
-        return agent[2] + steerStrength * dt
+        return agent[2] + (steerStrength + randomsteer) * dt
     else:
-        return agent[2] - steerStrength * dt
+        return agent[2] + (-steerStrength + randomsteer) * dt
 
 
 @wp.kernel
@@ -62,21 +67,23 @@ def advanceAgents(agents: wp.array(dtype=wp.vec3f), field: wp.array2d(dtype=floa
 
     agent = agents[i]
 
-    newangle = slimesteerUpdate(agent, field)
+    newangle = slimesteerUpdate(agent, field, seed,i)
 
     dirx = wp.cos(newangle)
     newx = agent[0] + dirx * speed * dt
 
     if newx < 0.0 or newx > size:
-        newx = wp.clamp(newx, 0.0, (sizef - 1.0) * 1.0)
-        newangle = wp.randf(rng) * 2. * math.pi
+        newx=wp.randf(rng,0.,sizef)
+        # newx = wp.clamp(newx, 0.0, (sizef - 1.0) * 1.0)
+        # newangle = wp.randf(rng) * 2. * math.pi
 
     diry = wp.sin(newangle)
     newy = agent[1] + diry * speed * dt
 
     if newy < 0.0 or newy > size:
-        newy = wp.clamp(newy, 0.0, (sizef - 1.) * 1.0)
-        newangle = wp.randf(rng) * 2. * math.pi
+        newy = wp.randf(rng, 0., sizef)
+        # newy = wp.clamp(newy, 0.0, (sizef - 1.) * 1.0)
+        # newangle = wp.randf(rng) * 2. * math.pi
 
     agent[0] = newx
     agent[1] = newy
@@ -99,15 +106,15 @@ def blurdiffuse(field: wp.array2d(dtype=float)):
 
     field[i, j] = wp.max(0., field[i, j] - (evaporate * dt))
 
-    sum = 0.
-    for dx in range(-1, 1):
-        for dy in range(-1, 1):
+    sum = float(0.)
+    for dx in range(-diffuseSize, diffuseSize):
+        for dy in range(-diffuseSize, diffuseSize):
             sx = i + dx
             sy = j + dy
-            if (sx >= 0 and sx < size and sy >= 0 and sy < size):
+            if 0 <= sx < size and 0 <= sy < size:
                 sum += field[sx, sy]
 
-    field[i, j] = wp.lerp(field[i,j], sum / 9.0, 10.0 * dt)
+    field[i, j] = wp.lerp(field[i, j], sum / diffuseSizef, 10.0 * dt)
 
 
 class SlimeSimWarp:
@@ -123,26 +130,27 @@ class SlimeSimWarp:
             npagents[i][2] = random.uniform(0., 1.) * 2 * wp.pi
         self.agents = wp.array(npagents, dtype=wp.vec3f)
 
-        # self.use_cuda_graph = wp.get_device().is_cuda
-        # if self.use_cuda_graph:
-        #     with wp.ScopedCapture() as capture:
-        #         self.advanceAgents()
-        #     self.graph = capture.graph
+        # I dont understand this, but the warp example used this and it makes things faster by like 2x, neat
+        self.use_cuda_graph = wp.get_device().is_cuda
+        if self.use_cuda_graph:
+            with wp.ScopedCapture() as capture:
+                self.advanceAgents()
+                wp.launch(blurdiffuse, dim=self.field.shape, inputs=[self.field])
+            self.graph = capture.graph
 
     def getf(self):
         return self.field.numpy()
 
     def advanceAgents(self):
-        # todo see if this can be optmized
         wp.launch(advanceAgents, dim=self.agents.size, inputs=[self.agents, self.field, self.seed])
 
     def step(self):
-        with wp.ScopedTimer("step"):
-            # if self.use_cuda_graph:
-            #     wp.capture_launch(self.graph)
-            # else:
-            self.advanceAgents()
-            wp.launch(blurdiffuse, dim=self.field.shape, inputs=[self.field])
+        with wp.ScopedTimer("step", synchronize=True):
+            if self.use_cuda_graph:
+                wp.capture_launch(self.graph)
+            else:
+                self.advanceAgents()
+                wp.launch(blurdiffuse, dim=self.field.shape, inputs=[self.field])
         self.seed += 1
 
     def step_and_render_frame(self, frame_num=None, img=None):
